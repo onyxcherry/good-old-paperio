@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { GameClient } from '../../backend/game';
+import { GameClient } from './game';
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const isDead = ref(false);

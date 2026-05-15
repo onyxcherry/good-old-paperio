@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -320,6 +321,43 @@ func (g *Game) broadcastState() {
 	}
 }
 
+type GameInfo struct {
+	ID         string `json:"id"`
+	Players    int    `json:"players"`
+	MaxPlayers int    `json:"max_players"`
+	HasSession bool   `json:"has_session"`
+}
+
+func handleGetGames(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		server.mu.RLock()
+		defer server.mu.RUnlock()
+
+		games := []GameInfo{}
+		for id, g := range server.Games {
+			g.mu.RLock()
+			hasSession := false
+			for _, p := range g.Players {
+				if p.Token == token {
+					hasSession = true
+					break
+				}
+			}
+			games = append(games, GameInfo{
+				ID:         id,
+				Players:    len(g.Players),
+				MaxPlayers: 10,
+				HasSession: hasSession,
+			})
+			g.mu.RUnlock()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(games)
+	}
+}
+
 func handleWebSocket(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -345,6 +383,25 @@ func handleWebSocket(server *Server) http.HandlerFunc {
 			game = NewGame(gameID)
 			server.Games[gameID] = game
 		}
+
+		// Check player limit before allowing connection
+		game.mu.RLock()
+		playerCount := len(game.Players)
+		var isReconnecting bool
+		for _, p := range game.Players {
+			if p.Token == token {
+				isReconnecting = true
+				break
+			}
+		}
+		game.mu.RUnlock()
+
+		if !isReconnecting && playerCount >= 10 {
+			server.mu.Unlock()
+			conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Game is full"))
+			conn.Close()
+			return
+		}
 		server.mu.Unlock()
 
 		player := &Player{
@@ -363,13 +420,26 @@ func handleWebSocket(server *Server) http.HandlerFunc {
 			}
 			if len(msg) >= 2 && msg[0] == 2 { // MsgType 2 = Direction Change
 				newDir := msg[1]
-				// Prevent 180-degree immediate turns
-				if (player.Dir == Up && newDir != Down) ||
-				   (player.Dir == Down && newDir != Up) ||
-				   (player.Dir == Left && newDir != Right) ||
-				   (player.Dir == Right && newDir != Left) {
-					player.Dir = newDir
+
+				game.mu.Lock()
+				var activePlayer *Player
+				for _, p := range game.Players {
+					if p.Token == token {
+						activePlayer = p
+						break
+					}
 				}
+
+				if activePlayer != nil {
+					// Prevent 180-degree immediate turns
+					if (activePlayer.Dir == Up && newDir != Down) ||
+					   (activePlayer.Dir == Down && newDir != Up) ||
+					   (activePlayer.Dir == Left && newDir != Right) ||
+					   (activePlayer.Dir == Right && newDir != Left) {
+						activePlayer.Dir = newDir
+					}
+				}
+				game.mu.Unlock()
 			}
 		}
 		conn.Close()
@@ -392,6 +462,7 @@ func main() {
 		}
 		fs.ServeHTTP(w, r)
 	})
+	http.HandleFunc("/api/games", handleGetGames(server))
 	http.HandleFunc("/ws", handleWebSocket(server))
 
 	log.Println("Server running on :8080")
