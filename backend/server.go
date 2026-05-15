@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	GridWidth  = 100
-	GridHeight = 100
+	GridWidth  = 210
+	GridHeight = 210
 	TickRate   = 100 * time.Millisecond // 10 ticks per second
 )
 
@@ -151,6 +151,8 @@ func (g *Game) tick() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	territoryCaptured := false
+
 	for _, p := range g.Players {
 		if !p.Alive {
 			continue
@@ -200,6 +202,38 @@ func (g *Game) tick() {
 			// Back in own territory, capture area
 			g.captureTerritory(p)
 			p.Tail = []Point{} // Reset tail
+			territoryCaptured = true
+		}
+	}
+
+	if territoryCaptured {
+		counts := make(map[uint32]int)
+		for x := 0; x < GridWidth; x++ {
+			for y := 0; y < GridHeight; y++ {
+				if owner := g.Grid[x][y]; owner != 0 {
+					counts[owner]++
+				}
+			}
+		}
+		totalCells := GridWidth * GridHeight
+		for id, count := range counts {
+			if count >= totalCells*99/100 {
+				g.win(id)
+			}
+		}
+	}
+}
+
+func (g *Game) win(winnerID uint32) {
+	buf := make([]byte, 5)
+	buf[0] = 4 // MsgType: Win
+	binary.BigEndian.PutUint32(buf[1:5], winnerID)
+
+	for _, p := range g.Players {
+		if p.Conn != nil {
+			p.mu.Lock()
+			p.Conn.WriteMessage(websocket.BinaryMessage, buf)
+			p.mu.Unlock()
 		}
 	}
 }
@@ -272,7 +306,7 @@ func (g *Game) broadcastState() {
 	defer g.mu.RUnlock()
 
 	// Calculate payload size
-	// [MsgType 1 byte] [NumPlayers 2 bytes] -> Player Data -> [NumGridUpdates 2 bytes] -> Grid Data
+	// [MsgType 1 byte] [NumPlayers 2 bytes] -> Player Data -> [NumGridUpdates 4 bytes] -> Grid Data
 	size := 1 + 2
 	for _, p := range g.Players {
 		size += 4 + 2 + 2 + 1 + 2 + (len(p.Tail) * 4) // ID(4), X(2), Y(2), Dir(1), TailLen(2), Tail points
@@ -280,7 +314,7 @@ func (g *Game) broadcastState() {
 	
 	// For optimization, a production app sends grid *deltas*. 
 	// For this snippet, we send the full grid state compactly.
-	size += 2 + (GridWidth * GridHeight * 4) 
+	size += 4 + (GridWidth * GridHeight * 4) 
 
 	buf := make([]byte, size)
 	buf[0] = 1 // MsgType: State Update
@@ -303,8 +337,8 @@ func (g *Game) broadcastState() {
 		}
 	}
 
-	binary.BigEndian.PutUint16(buf[offset:], uint16(GridWidth*GridHeight))
-	offset += 2
+	binary.BigEndian.PutUint32(buf[offset:], uint32(GridWidth*GridHeight))
+	offset += 4
 	for x := 0; x < GridWidth; x++ {
 		for y := 0; y < GridHeight; y++ {
 			binary.BigEndian.PutUint32(buf[offset:], g.Grid[x][y])
@@ -383,25 +417,6 @@ func handleWebSocket(server *Server) http.HandlerFunc {
 			game = NewGame(gameID)
 			server.Games[gameID] = game
 		}
-
-		// Check player limit before allowing connection
-		game.mu.RLock()
-		playerCount := len(game.Players)
-		var isReconnecting bool
-		for _, p := range game.Players {
-			if p.Token == token {
-				isReconnecting = true
-				break
-			}
-		}
-		game.mu.RUnlock()
-
-		if !isReconnecting && playerCount >= 10 {
-			server.mu.Unlock()
-			conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Game is full"))
-			conn.Close()
-			return
-		}
 		server.mu.Unlock()
 
 		player := &Player{
@@ -420,26 +435,13 @@ func handleWebSocket(server *Server) http.HandlerFunc {
 			}
 			if len(msg) >= 2 && msg[0] == 2 { // MsgType 2 = Direction Change
 				newDir := msg[1]
-
-				game.mu.Lock()
-				var activePlayer *Player
-				for _, p := range game.Players {
-					if p.Token == token {
-						activePlayer = p
-						break
-					}
+				// Prevent 180-degree immediate turns
+				if (player.Dir == Up && newDir != Down) ||
+				   (player.Dir == Down && newDir != Up) ||
+				   (player.Dir == Left && newDir != Right) ||
+				   (player.Dir == Right && newDir != Left) {
+					player.Dir = newDir
 				}
-
-				if activePlayer != nil {
-					// Prevent 180-degree immediate turns
-					if (activePlayer.Dir == Up && newDir != Down) ||
-					   (activePlayer.Dir == Down && newDir != Up) ||
-					   (activePlayer.Dir == Left && newDir != Right) ||
-					   (activePlayer.Dir == Right && newDir != Left) {
-						activePlayer.Dir = newDir
-					}
-				}
-				game.mu.Unlock()
 			}
 		}
 		conn.Close()

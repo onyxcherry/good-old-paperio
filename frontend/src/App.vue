@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { GameClient } from '../../backend/game';
+import { GameClient } from './game';
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const isDead = ref(false);
+const isWinner = ref(false);
+const isExited = ref(false);
 const inLobby = ref(true);
 const games = ref<any[]>([]);
 const sessionToken = ref("");
@@ -47,11 +49,17 @@ const generateGameName = () => {
 const joinGame = (gameId: string) => {
   inLobby.value = false;
   isDead.value = false;
+  isWinner.value = false;
+  isExited.value = false;
   setTimeout(() => {
     if (canvasRef.value) {
-      game = new GameClient(canvasRef.value, sessionToken.value, gameId, () => {
-        isDead.value = true;
-      });
+      game = new GameClient(
+        canvasRef.value, 
+        sessionToken.value, 
+        gameId, 
+        () => { isDead.value = true; },
+        () => { isWinner.value = true; }
+      );
     }
   }, 0);
 };
@@ -60,18 +68,24 @@ const createGame = () => {
   joinGame(generateGameName());
 };
 
-const exitGame = () => {
+const handleManualExit = () => {
   if (game) {
-    game.destroy();
+    game.destroy(true);
+    game = null;
+  }
+  isExited.value = true;
+};
+
+const respawn = () => {
+  if (game) {
+    game.destroy(false);
     game = null;
   }
   inLobby.value = true;
   isDead.value = false;
+  isWinner.value = false;
+  isExited.value = false;
   fetchGames();
-};
-
-const respawn = () => {
-  exitGame();
 };
 </script>
 
@@ -79,7 +93,7 @@ const respawn = () => {
   <div class="app-layout">
     <header class="topbar">
       <div class="brand">Paper.io <span>Enterprise</span></div>
-      <button v-if="!inLobby" @click="exitGame" class="btn btn-danger">Exit Game</button>
+      <button v-if="!inLobby" @click="handleManualExit" class="btn btn-danger">Exit Game</button>
     </header>
 
     <main class="game-container">
@@ -106,6 +120,24 @@ const respawn = () => {
       </div>
       <canvas v-else ref="canvasRef"></canvas>
       
+      <Transition name="pop">
+        <div v-if="isWinner" class="modal-overlay">
+          <div class="modal">
+            <h2>Victory!</h2>
+            <p>You captured 99% of the map!</p>
+            <button @click="respawn" class="btn btn-primary">Back to Lobby</button>
+          </div>
+        </div>
+      </Transition>
+      <Transition name="pop">
+        <div v-if="isExited" class="modal-overlay">
+          <div class="modal">
+            <h2>Session Ended</h2>
+            <p>You have left the game and your session was invalidated.</p>
+            <button @click="respawn" class="btn btn-primary">Back to Lobby</button>
+          </div>
+        </div>
+      </Transition>
       <Transition name="pop">
         <div v-if="isDead" class="modal-overlay">
           <div class="modal">
@@ -176,10 +208,10 @@ body, html {
 }
 
 canvas {
-  background: #1e1e2e;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
-  border: 1px solid #334155;
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #09090b;
 }
 
 .btn {
