@@ -30,19 +30,28 @@ export class GameClient {
     private lastSyncTime: number = Date.now();
     private particles: any[] = [];
     
-    constructor(canvas: HTMLCanvasElement, token: string, gameId: string, private onDeathCallback: () => void, private onWinCallback: () => void) {
+    constructor(
+        canvas: HTMLCanvasElement, 
+        token: string, 
+        gameId: string, 
+        private onDeathCallback: () => void, 
+        private onWinCallback: () => void,
+        private onErrorCallback: (error: string) => void
+    ) {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d")!;
         
         // Detect if we're on Vite dev server or production Go server
         const isDev = window.location.port === "5173";
         const wsHost = isDev ? "localhost:8080" : window.location.host;
+        const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
         
-        this.ws = new WebSocket(`ws://${wsHost}/ws?game=${gameId}&token=${token}`);
+        this.ws = new WebSocket(`${wsProtocol}//${wsHost}/ws?game=${gameId}&token=${token}`);
         this.ws.binaryType = "arraybuffer";
         
         this.ws.onmessage = this.handleMessage.bind(this);
         this.ws.onclose = this.handleClose.bind(this);
+        this.ws.onerror = this.handleError.bind(this);
         
         window.addEventListener("keydown", this.handleInput);
         window.addEventListener("resize", this.resizeCanvas);
@@ -129,6 +138,14 @@ export class GameClient {
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
         }
+    }
+
+    private handleError(event: Event) {
+        let errorMsg = "WebSocket connection error occurred.";
+        if (event instanceof ErrorEvent && event.message) {
+            errorMsg = `WebSocket error: ${event.message}`;
+        }
+        this.onErrorCallback(errorMsg);
     }
 
     private handleClose() {
