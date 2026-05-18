@@ -454,19 +454,9 @@ func main() {
 		Games: make(map[string]*Game),
 	}
 
-	fs := http.FileServer(http.Dir("../frontend/dist"))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Ensure index.html is revalidated, but allow aggressive caching for hashed assets
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		}
-		fs.ServeHTTP(w, r)
-	})
 	http.HandleFunc("/api/games", handleGetGames(server))
 	http.HandleFunc("/ws", handleWebSocket(server))
 
-	log.Println("Server running on :8080")
-	log.Fatal(http.ListenAndServe("0.0.0.0:8080", nil))
+	log.Println("Server running on 127.0.0.1:8080")
+	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
 }
