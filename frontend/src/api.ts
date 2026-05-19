@@ -8,30 +8,36 @@ export interface GameInfo {
 export const getSessionToken = async (): Promise<string> => {
   let token = localStorage.getItem("paperio_token");
   if (!token) {
-    const res = await fetch(`/api/session`);
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
+    try {
+      const res = await fetch(`/api/session`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      token = data.token;
+      localStorage.setItem("paperio_token", token);
+    } catch (err) {
+      throw new Error("Unable to obtain a session token. The server might be unavailable.");
     }
-    const data = await res.json();
-    token = data.token;
-    localStorage.setItem("paperio_token", token);
   }
   return token;
 };
 
 export const fetchAvailableGames = async (token: string): Promise<GameInfo[]> => {
-  const res = await fetch(`/api/games?token=${encodeURIComponent(token)}`);
-  if (!res.ok) {
-    throw new Error(`HTTP error! status: ${res.status}`);
+  try {
+    const res = await fetch(`/api/games?token=${encodeURIComponent(token)}`);
+    if (!res.ok) throw new Error();
+    return await res.json();
+  } catch (err) {
+    throw new Error("Unable to fetch available games. Please check your connection.");
   }
-  return await res.json();
 };
 
 export const createNewGame = async (): Promise<string> => {
-  const res = await fetch(`/api/games/create`, { method: "POST" });
-  if (!res.ok) {
-    throw new Error(`HTTP error! status: ${res.status}`);
+  try {
+    const res = await fetch(`/api/games/create`, { method: "POST" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    return data.id;
+  } catch (err) {
+    throw new Error("Unable to create a new game. Please try again.");
   }
-  const data = await res.json();
-  return data.id;
 };

@@ -141,9 +141,9 @@ export class GameClient {
     }
 
     private handleError(event: Event) {
-        let errorMsg = "WebSocket connection error occurred.";
+        let errorMsg = "Lost connection to the game server.";
         if (event instanceof ErrorEvent && event.message) {
-            errorMsg = `WebSocket error: ${event.message}`;
+            errorMsg = `Connection error: ${event.message}`;
         }
         this.onErrorCallback(errorMsg);
     }

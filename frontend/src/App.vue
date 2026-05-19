@@ -22,7 +22,7 @@ const loadGames = async () => {
   try {
     games.value = await fetchAvailableGames(sessionToken.value);
   } catch (error: any) {
-    errorMessage.value = "Failed to fetch games: " + (error.message || String(error));
+    errorMessage.value = error.message || "An unexpected error occurred.";
   }
 };
 
@@ -51,7 +51,7 @@ const createGame = async () => {
     const newGameId = await createNewGame();
     joinGame(newGameId);
   } catch (error: any) {
-    errorMessage.value = "Failed to create game: " + (error.message || String(error));
+    errorMessage.value = error.message || "An unexpected error occurred.";
   }
 };
 
@@ -82,7 +82,7 @@ onMounted(async () => {
     loadGames();
     fetchInterval = window.setInterval(loadGames, 2000);
   } catch (error: any) {
-    errorMessage.value = "Failed to initialize session: " + (error.message || String(error));
+    errorMessage.value = error.message || "An unexpected error occurred.";
   }
 });
 
@@ -112,7 +112,7 @@ onUnmounted(() => {
       <GameModal :show="isDead" title="Game Over" message="Your territory was overrun or you crashed."
         @action="respawn" />
 
-      <GameModal :show="!!errorMessage" title="Error" :message="errorMessage" buttonText="Dismiss"
+      <GameModal :show="!!errorMessage" title="Error" :message="errorMessage" buttonText="Dismiss" :is-error="true"
         @action="errorMessage = ''" />
     </main>
   </div>
