@@ -13,12 +13,12 @@ export const getSessionToken = async (): Promise<string> => {
       if (!res.ok) throw new Error();
       const data = await res.json();
       token = data.token;
-      localStorage.setItem("paperio_token", token);
+      localStorage.setItem("paperio_token", token as string);
     } catch (err) {
       throw new Error("Unable to obtain a session token. The server might be unavailable.");
     }
   }
-  return token;
+  return token as string;
 };
 
 export const fetchAvailableGames = async (token: string): Promise<GameInfo[]> => {

@@ -1,3 +1,4 @@
+import { pb } from './pb/game';
 const CELL_SIZE = 24;
 
 export interface Player {
@@ -59,36 +60,26 @@ export class GameClient {
     }
 
     private handleMessage(event: MessageEvent) {
-        const view = new DataView(event.data);
-        const msgType = view.getUint8(0);
+        const msg = pb.ServerMessage.decode(new Uint8Array(event.data));
 
-        if (msgType === 0) { // Init
-            this.myId = view.getUint32(1);
-            this.gridWidth = view.getUint16(5);
-            this.gridHeight = view.getUint16(7);
+        if (msg.init) {
+            this.myId = msg.init.id ?? 0;
+            this.gridWidth = msg.init.gridWidth ?? 0;
+            this.gridHeight = msg.init.gridHeight ?? 0;
             this.resizeCanvas();
         } 
-        else if (msgType === 1) { // Sync State
+        else if (msg.state) {
             this.lastSyncTime = Date.now();
-            let offset = 1;
-            const numPlayers = view.getUint16(offset);
-            offset += 2;
 
             const players: Player[] = [];
             const currentIds = new Set<number>();
-            for (let i = 0; i < numPlayers; i++) {
-                const id = view.getUint32(offset);
-                const x = view.getUint16(offset + 4);
-                const y = view.getUint16(offset + 6);
-                const dir = view.getUint8(offset + 8);
-                const tailLen = view.getUint16(offset + 9);
-                offset += 11;
-
-                const tail = [];
-                for (let t = 0; t < tailLen; t++) {
-                    tail.push({ x: view.getUint16(offset), y: view.getUint16(offset + 2) });
-                    offset += 4;
-                }
+            for (const p of msg.state.players || []) {
+                const id = p.id ?? 0;
+                const x = p.x ?? 0;
+                const y = p.y ?? 0;
+                const dir = p.dir ?? 0;
+                const tail = (p.tail || []).map(t => ({ x: t.x ?? 0, y: t.y ?? 0 }));
+                
                 players.push({ id, x, y, dir, tail });
                 currentIds.add(id);
 
@@ -110,18 +101,15 @@ export class GameClient {
                 }
             }
 
-            const numGrid = view.getUint32(offset);
-            offset += 4;
-            const grid = new Uint32Array(this.gridWidth * this.gridHeight);
-            for(let i = 0; i < numGrid; i++) {
-                grid[i] = view.getUint32(offset);
-                offset += 4;
-            }
+            const rawGrid = msg.state.grid || [];
+            const grid = rawGrid instanceof Uint32Array 
+                ? rawGrid 
+                : new Uint32Array(rawGrid);
 
             this.gameState = { players, grid };
         }
-        else if (msgType === 4) { // Win
-            const winnerId = view.getUint32(1);
+        else if (msg.win) {
+            const winnerId = msg.win.winnerId ?? 0;
             if (winnerId === this.myId) {
                 this.onWinCallback();
             } else {
@@ -165,10 +153,10 @@ export class GameClient {
             }
             
             if (dirByte !== -1) {
-                const buf = new ArrayBuffer(2);
-                const view = new DataView(buf);
-                view.setUint8(0, 2); 
-                view.setUint8(1, dirByte);
+                const msg = pb.ClientMessage.create({
+                    direction: { dir: dirByte }
+                });
+                const buf = pb.ClientMessage.encode(msg).finish();
                 this.ws.send(buf);
             }
         }
@@ -353,8 +341,10 @@ export class GameClient {
 
         if (this.ws.readyState === WebSocket.OPEN) {
             if (isManualExit) {
-                const buf = new ArrayBuffer(1);
-                new DataView(buf).setUint8(0, 3); // Leave Game
+                const msg = pb.ClientMessage.create({
+                    leave: {}
+                });
+                const buf = pb.ClientMessage.encode(msg).finish();
                 this.ws.send(buf);
             }
             this.ws.close();

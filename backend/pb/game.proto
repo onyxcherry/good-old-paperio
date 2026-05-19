@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package pb;
+option go_package = "paperio/pb";
+
+message Point {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message Player {
+  uint32 id = 1;
+  int32 x = 2;
+  int32 y = 3;
+  uint32 dir = 4;
+  repeated Point tail = 5;
+}
+
+message InitMsg {
+  uint32 id = 1;
+  uint32 gridWidth = 2;
+  uint32 gridHeight = 3;
+}
+
+message StateMsg {
+  repeated Player players = 1;
+  repeated uint32 grid = 2 [packed=true];
+}
+
+message WinMsg {
+  uint32 winnerId = 1;
+}
+
+message ServerMessage {
+  oneof payload {
+    InitMsg init = 1;
+    StateMsg state = 2;
+    WinMsg win = 3;
+  }
+}
+
+message DirectionMsg {
+  uint32 dir = 1;
+}
+
+message LeaveMsg {}
+
+message ClientMessage {
+  oneof payload {
+    DirectionMsg direction = 1;
+    LeaveMsg leave = 2;
+  }
+}

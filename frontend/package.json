@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build"
+    "build": "vue-tsc && vite build",
+    "proto": "pbjs -t static-module -w es6 -o src/pb/game.js ../backend/pb/game.proto && pbts -o src/pb/game.d.ts src/pb/game.js"
   },
   "dependencies": {
+    "protobufjs": "^7.2.5",
     "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
+    "protobufjs-cli": "^1.1.2",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
     "vue-tsc": "^2.2.0"

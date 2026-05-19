@@ -1,5 +1,31 @@
 # Good old paper.io game for TIwPR
 
+## Build backend
+
+```bash
+cd backend
+```
+
+```shell
+go mod tidy
+```
+
+```shell
+protoc --go_out=. --go_opt=paths=source_relative pb/game.proto
+```
+
+## Run the Backend
+
+Run the Go backend server
+
+```bash
+go build -o server .
+```
+
+```bash
+./server
+```
+
 ## Build the Frontend
 
 1. Navigate to the frontend directory
@@ -22,18 +48,3 @@
 
    This will generate a `dist` folder.
 
-## Run the Backend
-
-Run the Go backend server
-
-```bash
-cd backend
-```
-
-```bash
-go build -o server server.go
-```
-
-```bash
-./server
-```
