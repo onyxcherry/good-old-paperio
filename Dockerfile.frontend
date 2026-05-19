@@ -1,0 +1,15 @@
+FROM node:24-alpine AS builder
+WORKDIR /app
+
+# Copy everything so `npm run proto` can access the backend schema correctly
+COPY . .
+
+WORKDIR /app/frontend
+RUN npm install
+RUN npm run proto
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
