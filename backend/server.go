@@ -61,6 +61,15 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+var adjs = []string{"swift", "brave", "mighty", "clever", "silent", "happy", "lucky", "fierce"}
+var nouns = []string{"tiger", "eagle", "dragon", "panther", "wolf", "bear", "fox", "shark"}
+
+func generateGameName() string {
+	adj := adjs[rand.Intn(len(adjs))]
+	noun := nouns[rand.Intn(len(nouns))]
+	return fmt.Sprintf("%s-%s-%d", adj, noun, rand.Intn(1000))
+}
+
 func NewGame(id string) *Game {
 	grid := make([][]uint32, GridWidth)
 	for i := range grid {
@@ -392,6 +401,38 @@ func handleGetGames(server *Server) http.HandlerFunc {
 	}
 }
 
+func handleCreateGame(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		server.mu.Lock()
+		defer server.mu.Unlock()
+
+		var gameID string
+		for {
+			gameID = generateGameName()
+			if _, exists := server.Games[gameID]; !exists {
+				break
+			}
+		}
+
+		game := NewGame(gameID)
+		server.Games[gameID] = game
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"id": gameID})
+	}
+}
+
+func handleGetSession(w http.ResponseWriter, r *http.Request) {
+	token := fmt.Sprintf("t_%x%x", time.Now().UnixNano(), rand.Int63())
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
 func handleWebSocket(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -455,6 +496,8 @@ func main() {
 	}
 
 	http.HandleFunc("/api/games", handleGetGames(server))
+	http.HandleFunc("/api/games/create", handleCreateGame(server))
+	http.HandleFunc("/api/session", handleGetSession)
 	http.HandleFunc("/ws", handleWebSocket(server))
 
 	log.Println("Server running on 127.0.0.1:8080")

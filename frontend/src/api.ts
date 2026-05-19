@@ -5,10 +5,15 @@ export interface GameInfo {
   has_session: boolean;
 }
 
-export const getSessionToken = (): string => {
+export const getSessionToken = async (): Promise<string> => {
   let token = localStorage.getItem("paperio_token");
   if (!token) {
-    token = "t_" + Math.random().toString(36).substring(2, 9);
+    const res = await fetch(`/api/session`);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    const data = await res.json();
+    token = data.token;
     localStorage.setItem("paperio_token", token);
   }
   return token;
@@ -20,4 +25,13 @@ export const fetchAvailableGames = async (token: string): Promise<GameInfo[]> =>
     throw new Error(`HTTP error! status: ${res.status}`);
   }
   return await res.json();
+};
+
+export const createNewGame = async (): Promise<string> => {
+  const res = await fetch(`/api/games/create`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.id;
 };

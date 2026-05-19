@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref, nextTick } from 'vue';
 import { GameClient } from './game';
-import { fetchAvailableGames, getSessionToken, type GameInfo } from './api';
+import { fetchAvailableGames, getSessionToken, createNewGame, type GameInfo } from './api';
 import TopBar from './components/TopBar.vue';
 import GameLobby from './components/GameLobby.vue';
 import GameModal from './components/GameModal.vue';
@@ -26,37 +26,13 @@ const loadGames = async () => {
   }
 };
 
-onMounted(() => {
-  sessionToken.value = getSessionToken();
-  loadGames();
-  fetchInterval = window.setInterval(loadGames, 2000);
-});
-
-onUnmounted(() => {
-  if (game) {
-    game.destroy();
-  }
-  if (fetchInterval !== null) {
-    clearInterval(fetchInterval);
-  }
-});
-
-const ADJS = ["swift", "brave", "mighty", "clever", "silent", "happy", "lucky", "fierce"];
-const NOUNS = ["tiger", "eagle", "dragon", "panther", "wolf", "bear", "fox", "shark"];
-
-const generateGameName = () => {
-  const adj = ADJS[Math.floor(Math.random() * ADJS.length)];
-  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-  return `${adj}-${noun}-${Math.floor(Math.random() * 1000)}`;
-};
-
 const joinGame = (gameId: string) => {
   inLobby.value = false;
   isDead.value = false;
   isWinner.value = false;
   isExited.value = false;
   errorMessage.value = "";
-  setTimeout(() => {
+  nextTick(() => {
     if (canvasRef.value) {
       game = new GameClient(
         canvasRef.value,
@@ -67,11 +43,16 @@ const joinGame = (gameId: string) => {
         (err) => { errorMessage.value = err; }
       );
     }
-  }, 0);
+  });
 };
 
-const createGame = () => {
-  joinGame(generateGameName());
+const createGame = async () => {
+  try {
+    const newGameId = await createNewGame();
+    joinGame(newGameId);
+  } catch (error: any) {
+    errorMessage.value = "Failed to create game: " + (error.message || String(error));
+  }
 };
 
 const handleManualExit = () => {
@@ -94,6 +75,25 @@ const respawn = () => {
   errorMessage.value = "";
   loadGames();
 };
+
+onMounted(async () => {
+  try {
+    sessionToken.value = await getSessionToken();
+    loadGames();
+    fetchInterval = window.setInterval(loadGames, 2000);
+  } catch (error: any) {
+    errorMessage.value = "Failed to initialize session: " + (error.message || String(error));
+  }
+});
+
+onUnmounted(() => {
+  if (game) {
+    game.destroy();
+  }
+  if (fetchInterval !== null) {
+    clearInterval(fetchInterval);
+  }
+});
 </script>
 
 <template>
